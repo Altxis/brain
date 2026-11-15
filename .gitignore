@@ -1,10 +1,6 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
+node_modules/
 dist/
-wheels/
-*.egg-info
+*.tsbuildinfo
 
-# Virtual environments
-.venv
+# База: личные данные, собирается заново через `npm run brain sync`
+data/
