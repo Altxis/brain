@@ -1,18 +1,18 @@
 /**
- * SQLite: таблица записей и полнотекстовый индекс FTS5 рядом с ней.
+ * SQLite: a records table with an FTS5 full-text index next to it.
  *
- * Пока самый простой вариант: индекс по title и body, ранжирование bm25 по умолчанию.
- * Веса полей, свежесть и карточки — на следующих этапах.
+ * The simplest version for now: index on title and body, default bm25 ranking.
+ * Field weights, recency and cards come in later stages.
  */
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { DatabaseSync } from "node:sqlite"; // встроен в Node; FTS5 в нём есть начиная с Node 26
+import { DatabaseSync } from "node:sqlite"; // built into Node; has FTS5 since Node 26
 
 import type { BrainRecord } from "./records.ts";
 
 export type DB = DatabaseSync;
 
-// Путь от этого файла, а не от текущей папки: MCP-сервер Claude запускает из своей рабочей папки.
+// Path relative to this file, not the cwd: Claude starts the MCP server from its own working directory.
 const PROJECT_ROOT = join(import.meta.dirname, "..");
 export const DEFAULT_DB = process.env.BRAIN_DB ?? join(PROJECT_ROOT, "data", "brain.db");
 
@@ -27,11 +27,11 @@ CREATE TABLE IF NOT EXISTS records (
     updated_at TEXT NOT NULL,
     UNIQUE (source, external_id)
 );
--- Копия текста под поиск. rowid в индексе = id записи.
+-- Copy of the text for search. Index rowid = record id.
 CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(title, body);
 `;
 
-/** Строка таблицы records — как она лежит в базе (имена колонок в snake_case). */
+/** A row of the records table as stored (snake_case column names). */
 export interface StoredRecord {
   id: number;
   source: string;
@@ -61,9 +61,9 @@ export function connect(path: string = DEFAULT_DB): DB {
 let savepoints = 0;
 
 /**
- * Выполнить fn атомарно: либо все запросы внутри применятся, либо ни один.
- * Без этого SQLite коммитит каждый запрос отдельно. SAVEPOINT, в отличие от BEGIN, можно вкладывать:
- * снаружи транзакции он открывает новую, внутри — ставит точку отката.
+ * Run fn atomically: either every query inside applies, or none does.
+ * Without this SQLite commits each query on its own. Unlike BEGIN, SAVEPOINT can be nested:
+ * outside a transaction it opens a new one, inside one it sets a rollback point.
  */
 export function transaction<T>(db: DB, fn: () => T): T {
   const name = `sp${savepoints++}`;
@@ -78,7 +78,7 @@ export function transaction<T>(db: DB, fn: () => T): T {
   }
 }
 
-/** Вставить или обновить запись — и синхронно индекс. Повторный вызов с теми же данными ничего не меняет. */
+/** Insert or update a record — and the index along with it. Calling again with the same data changes nothing. */
 export function upsert(db: DB, r: BrainRecord): void {
   transaction(db, () => {
     const { id } = db
@@ -97,7 +97,7 @@ export function upsert(db: DB, r: BrainRecord): void {
 }
 
 export function search(db: DB, query: string, limit = 5): SearchHit[] {
-  // Каждое слово в кавычки: так спецсимволы запроса (дефис, двоеточие) не ломают синтаксис FTS5.
+  // Quote every word so special characters in the query (hyphen, colon) don't break FTS5 syntax.
   const words = query.split(/\s+/).filter(Boolean);
   if (words.length === 0) return [];
   const match = words.map((w) => `"${w.replaceAll('"', '""')}"`).join(" OR ");
@@ -110,7 +110,7 @@ export function search(db: DB, query: string, limit = 5): SearchHit[] {
        ORDER BY bm25(records_fts)
        LIMIT ?`,
     )
-    .all(match, limit) as unknown as SearchHit[]; // node:sqlite не знает наших полей — тип строки задаём сами
+    .all(match, limit) as unknown as SearchHit[]; // node:sqlite doesn't know our columns — we set the row type ourselves
 }
 
 export function get(db: DB, id: number): StoredRecord | undefined {

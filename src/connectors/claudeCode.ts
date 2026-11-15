@@ -1,9 +1,9 @@
 /**
- * Коннектор Claude Code: сессии из ~/.claude/projects/<папка>/<session>.jsonl.
+ * Claude Code connector: sessions from ~/.claude/projects/<folder>/<session>.jsonl.
  *
- * Каждая строка JSONL — событие. Нам нужны только реплики человека и текст ответов:
- * служебные события (attachment, system, …), вывод инструментов и рассуждения модели отбрасываем.
- * Подагенты лежат в подпапке <session>/subagents/ — это побочные ветки, их не берём.
+ * Each JSONL line is an event. We only want the human's turns and the text of the replies:
+ * service events (attachment, system, …), tool output and model reasoning are dropped.
+ * Subagents live in a <session>/subagents/ subfolder — they are side branches, we skip them.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -14,7 +14,7 @@ import type { BrainRecord } from "../records.ts";
 export const SOURCE = "claude_code";
 export const DEFAULT_ROOT = join(homedir(), ".claude", "projects");
 
-/** Только те поля события, которые мы читаем. Остальное в JSON есть, но нам не нужно. */
+/** Only the event fields we read. The JSON has more, we don't need it. */
 interface ContentBlock {
   type?: string;
   text?: string;
@@ -30,7 +30,7 @@ interface SessionEvent {
   message?: { content?: string | ContentBlock[] };
 }
 
-/** Файлы ровно на один уровень вложенности (<root>/<папка>/<id>.jsonl), поэтому subagents/ сюда не попадают. */
+/** Files exactly one level deep (<root>/<folder>/<id>.jsonl), so subagents/ never gets in. */
 export function sessionFiles(root: string = DEFAULT_ROOT): string[] {
   const files: string[] = [];
   for (const dir of readdirSync(root, { withFileTypes: true })) {
@@ -42,7 +42,7 @@ export function sessionFiles(root: string = DEFAULT_ROOT): string[] {
   return files.sort();
 }
 
-/** Текст сообщения: строка или список блоков, из которых берём только блоки type=text. */
+/** Message text: either a string or a list of blocks, of which we keep only type=text. */
 function textOf(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -58,22 +58,22 @@ function readEvents(path: string): SessionEvent[] {
     try {
       events.push(JSON.parse(line));
     } catch {
-      // файл могут дописывать прямо сейчас — последняя строка бывает обрезана
+      // the file may be written to right now — the last line can be truncated
     }
   }
   return events;
 }
 
-const sessionId = (path: string) => basename(path, ".jsonl"); // имя файла — это id сессии
+const sessionId = (path: string) => basename(path, ".jsonl"); // the file name is the session id
 
-/** Сравнение строк по кодам символов — как sort() в Python, без учёта локали. */
+/** Compare strings by code units — like Python's sort(), locale-independent. */
 const byString = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
- * Одна сессия может лежать в нескольких файлах: если в разговоре сменилась рабочая папка,
- * Claude Code продолжает ту же сессию (тот же id) в папке нового проекта — и копирует туда
- * всю прежнюю историю. Поэтому склеиваем файлы от старого к новому и выкидываем повторы по uuid
- * события: остаётся первая копия, с исходной рабочей папкой.
+ * One session can span several files: if the working directory changes mid-conversation,
+ * Claude Code continues the same session (same id) in the new project's folder — and copies
+ * the whole earlier history there. So we concatenate files from oldest to newest and drop
+ * duplicate events by uuid: the first copy wins, with the original working directory.
  */
 export function parse(paths: string[]): BrainRecord | null {
   const seen = new Set<string>();
@@ -88,7 +88,7 @@ export function parse(paths: string[]): BrainRecord | null {
       events.push(e);
     }
   }
-  events.sort((a, b) => byString(a.timestamp ?? "", b.timestamp ?? "")); // sort() в JS стабильный
+  events.sort((a, b) => byString(a.timestamp ?? "", b.timestamp ?? "")); // sort() in JS is stable
 
   const turns: string[] = [];
   let firstUser = "";
@@ -98,11 +98,11 @@ export function parse(paths: string[]): BrainRecord | null {
     const kind = event.type;
     if ((kind !== "user" && kind !== "assistant") || event.isSidechain || event.isMeta) continue;
     const text = textOf(event.message?.content).trim();
-    if (!text) continue; // например, сообщение user, в котором только tool_result
+    if (!text) continue; // e.g. a user message that only carries a tool_result
     if (kind === "user" && !firstUser) firstUser = text;
     project ??= event.cwd ?? null;
     lastTs = event.timestamp ?? lastTs;
-    turns.push(`${kind === "user" ? "Я" : "Claude"}: ${text}`);
+    turns.push(`${kind === "user" ? "User" : "Claude"}: ${text}`);
   }
   if (turns.length === 0) return null;
 
@@ -110,7 +110,7 @@ export function parse(paths: string[]): BrainRecord | null {
   return {
     source: SOURCE,
     externalId: sessionId(paths[0]!),
-    // Array.from режет по символам, а не по UTF-16 — эмодзи не разломаются пополам.
+    // Array.from splits by code points, not UTF-16 units — emoji won't be cut in half.
     title: Array.from(firstLine).slice(0, 100).join(""),
     body: turns.join("\n\n"),
     updatedAt: lastTs,

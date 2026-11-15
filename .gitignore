@@ -2,5 +2,5 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# База: личные данные, собирается заново через `npm run brain sync`
+# Database: personal data, rebuilt with `npm run brain sync`
 data/

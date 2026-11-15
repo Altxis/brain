@@ -1,4 +1,4 @@
-/** Сквозной тест «нити»: JSONL-сессия → запись → база → поиск. */
+/** End-to-end "thread" test: JSONL session → record → database → search. */
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,23 +22,23 @@ const jsonl = (events: readonly object[]) => events.map((e) => JSON.stringify(e)
 
 function writeSession(root: string, name = "abc123"): void {
   const events = [
-    { type: "user", cwd: "/w/proj", timestamp: "2026-11-01T10:00:00Z", message: { content: "Как выгрузить слова из Migaku?" } },
+    { type: "user", cwd: "/w/proj", timestamp: "2026-11-01T10:00:00Z", message: { content: "How do I export words from Migaku?" } },
     {
       type: "assistant",
       timestamp: "2026-11-01T10:00:05Z",
       message: {
         content: [
-          { type: "thinking", thinking: "скрыто" },
-          { type: "text", text: "Через расширение Word Exporter." },
+          { type: "thinking", thinking: "hidden" },
+          { type: "text", text: "Use the Word Exporter extension." },
         ],
       },
     },
-    { type: "user", timestamp: "2026-11-01T10:00:06Z", message: { content: [{ type: "tool_result", content: "вывод инструмента" }] } },
+    { type: "user", timestamp: "2026-11-01T10:00:06Z", message: { content: [{ type: "tool_result", content: "tool output" }] } },
     { type: "attachment", timestamp: "2026-11-01T10:00:07Z" },
   ];
   const d = join(root, "-w-proj");
   mkdirSync(d, { recursive: true });
-  writeFileSync(join(d, `${name}.jsonl`), jsonl(events) + "\n{обрезано");
+  writeFileSync(join(d, `${name}.jsonl`), jsonl(events) + "\n{truncated");
   const sub = join(d, name, "subagents");
   mkdirSync(sub, { recursive: true });
   writeFileSync(join(sub, "agent-1.jsonl"), JSON.stringify(events[0]));
@@ -48,13 +48,13 @@ test("parse keeps only dialogue", () => {
   const root = tmp();
   writeSession(root);
   const records = [...claudeCode.fetch(root)];
-  assert.equal(records.length, 1); // подагент не попал
+  assert.equal(records.length, 1); // the subagent did not get in
   const record = records[0]!;
   assert.equal(record.externalId, "abc123");
-  assert.equal(record.title, "Как выгрузить слова из Migaku?");
+  assert.equal(record.title, "How do I export words from Migaku?");
   assert.equal(record.project, "/w/proj");
   assert.ok(record.body.includes("Word Exporter"));
-  assert.ok(!record.body.includes("скрыто") && !record.body.includes("вывод инструмента"));
+  assert.ok(!record.body.includes("hidden") && !record.body.includes("tool output"));
 });
 
 test("sync is idempotent and searchable", () => {
@@ -69,17 +69,17 @@ test("sync is idempotent and searchable", () => {
   assert.equal(count("records_fts"), 1);
   const hits = db.search(conn, "Exporter");
   assert.equal(hits.length, 1);
-  assert.ok(hits[0]!.title.startsWith("Как выгрузить"));
+  assert.ok(hits[0]!.title.startsWith("How do I export"));
   conn.close();
 });
 
 test("session split across project dirs is merged", () => {
-  // Сессия началась в /w/a, потом сменилась папка — продолжение лежит в другой папке с тем же id.
-  // Новый файл повторяет старую историю (те же uuid) и дописывает продолжение.
+  // The session started in /w/a, then the folder changed — the continuation lives in another folder with the same id.
+  // The new file repeats the old history (same uuids) and appends the continuation.
   const root = tmp();
-  const first = { type: "user", uuid: "u1", cwd: "/w/a", timestamp: "2026-11-01T10:00:00Z", message: { content: "начало в проекте A" } };
+  const first = { type: "user", uuid: "u1", cwd: "/w/a", timestamp: "2026-11-01T10:00:00Z", message: { content: "start in project A" } };
   const copy = { ...first, cwd: "/w/b" };
-  const next = { type: "user", uuid: "u2", cwd: "/w/b", timestamp: "2026-11-02T10:00:00Z", message: { content: "продолжение в проекте B" } };
+  const next = { type: "user", uuid: "u2", cwd: "/w/b", timestamp: "2026-11-02T10:00:00Z", message: { content: "continued in project B" } };
   for (const [folder, events] of [["-w-a", [first]], ["-w-b", [copy, next]]] as const) {
     mkdirSync(join(root, folder));
     writeFileSync(join(root, folder, "same-id.jsonl"), jsonl(events));
@@ -87,8 +87,8 @@ test("session split across project dirs is merged", () => {
   const records = [...claudeCode.fetch(root)];
   assert.equal(records.length, 1);
   const body = records[0]!.body;
-  assert.equal(body.split("начало").length - 1, 1);
-  assert.ok(body.indexOf("начало") < body.indexOf("продолжение"));
+  assert.equal(body.split("start in").length - 1, 1);
+  assert.ok(body.indexOf("start in") < body.indexOf("continued in"));
   assert.equal(records[0]!.project, "/w/a");
   assert.ok(records[0]!.updatedAt.startsWith("2026-11-02"));
 });

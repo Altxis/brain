@@ -1,7 +1,7 @@
 {
   "name": "brain",
   "version": "0.1.0",
-  "description": "Личная память для Claude: учебная пересборка второго мозга",
+  "description": "Personal memory for Claude: a learning rebuild of a second brain",
   "private": true,
   "type": "module",
   "engines": {

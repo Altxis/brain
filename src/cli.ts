@@ -1,20 +1,20 @@
-/** brain — личная память для Claude: собрать → сохранить → найти → отдать агенту. */
+/** brain — personal memory for Claude: collect → store → find → hand to the agent. */
 import { parseArgs } from "node:util";
 
 import * as claudeCode from "./connectors/claudeCode.ts";
 import * as db from "./db.ts";
 
-const HELP = `usage: brain <команда>
+const HELP = `usage: brain <command>
 
-  sync                  забрать сессии в базу
-  search <запрос> [-n N]  поиск (по умолчанию 5 результатов)
-  show <id>             запись целиком
-  mcp                   MCP-сервер для Claude (stdio)`;
+  sync                  pull sessions into the database
+  search <query> [-n N] search (5 results by default)
+  show <id>             full record
+  mcp                   MCP server for Claude (stdio)`;
 
 function sync(): void {
   const conn = db.connect();
   let n = 0;
-  // Одна внешняя транзакция на весь проход — в разы быстрее, чем коммит на каждую запись.
+  // One outer transaction for the whole pass — many times faster than a commit per record.
   db.transaction(conn, () => {
     for (const record of claudeCode.fetch()) {
       db.upsert(conn, record);
@@ -22,7 +22,7 @@ function sync(): void {
     }
   });
   conn.close();
-  console.log(`claude_code: ${n} сессий в базе`);
+  console.log(`claude_code: ${n} sessions in the database`);
 }
 
 function search(query: string, limit: number): void {
@@ -30,14 +30,14 @@ function search(query: string, limit: number): void {
   const rows = db.search(conn, query, limit);
   conn.close();
   for (const r of rows) console.log(`#${r.id}  ${r.updated_at.slice(0, 10)}  ${r.title}\n    ${r.snippet}\n`);
-  if (rows.length === 0) console.log("ничего не нашлось");
+  if (rows.length === 0) console.log("nothing found");
 }
 
 function show(id: number): void {
   const conn = db.connect();
   const row = db.get(conn, id);
   conn.close();
-  console.log(row ? row.body : `нет записи ${id}`);
+  console.log(row ? row.body : `no record ${id}`);
 }
 
 async function main(): Promise<void> {
@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   if (command === "search" && arg) return search(arg, Number(values.limit));
   if (command === "show" && arg) return show(Number(arg));
   if (command === "mcp") {
-    const { run } = await import("./mcpServer.ts"); // SDK грузим только когда нужен сервер
+    const { run } = await import("./mcpServer.ts"); // load the SDK only when the server is needed
     return run();
   }
   console.error(HELP);

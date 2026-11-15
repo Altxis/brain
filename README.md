@@ -1,35 +1,35 @@
 # brain
 
-Личная память для Claude: собрать → сохранить → найти → отдать агенту.
-Учебная пересборка «второго мозга» с нуля, этап за этапом. Выводы — в [LEARNING.md](LEARNING.md).
+Personal memory for Claude: collect → store → find → hand to the agent.
+A learning rebuild of a "second brain" from scratch, stage by stage. Takeaways are in [LEARNING.md](LEARNING.md).
 
-## Запуск
+## Usage
 
-Нужен Node.js 26 (версия в `.nvmrc`: `nvm use` в корне проекта переключит на неё).
+Requires Node.js 26 (pinned in `.nvmrc`: run `nvm use` in the project root to switch to it).
 
 ```bash
 npm install
-npm run brain sync              # забрать сессии Claude Code в базу (data/brain.db в проекте, или $BRAIN_DB)
-npm run brain -- search migaku  # поиск (`--` нужен, чтобы npm не съел флаги вроде -n)
-npm run brain -- show 1         # запись целиком
-npm test                        # тесты (node:test)
-npm run typecheck               # проверка типов
+npm run brain sync              # pull Claude Code sessions into the database (data/brain.db in the project, or $BRAIN_DB)
+npm run brain -- search migaku  # search (`--` stops npm from eating flags like -n)
+npm run brain -- show 1         # full record
+npm test                        # tests (node:test)
+npm run typecheck               # type check
 ```
 
-Подключить к Claude Code (путь к `tsx` абсолютный: `npm run` печатает баннер в stdout и ломает протокол):
+Connect to Claude Code (use an absolute path to `tsx`: `npm run` prints a banner to stdout and breaks the protocol):
 
 ```bash
-claude mcp add -s user brain -- /путь/к/brain/node_modules/.bin/tsx /путь/к/brain/src/cli.ts mcp
+claude mcp add -s user brain -- /path/to/brain/node_modules/.bin/tsx /path/to/brain/src/cli.ts mcp
 ```
 
-## Устройство
+## Layout
 
 ```
 src/
-  records.ts                общий формат записи (BrainRecord)
-  connectors/claudeCode.ts  сессии Claude Code → записи
-  db.ts                     SQLite (встроенный node:sqlite) + FTS5: upsert, search, get
-  mcpServer.ts              инструменты search и get_record для Claude
+  records.ts                common record format (BrainRecord)
+  connectors/claudeCode.ts  Claude Code sessions → records
+  db.ts                     SQLite (built-in node:sqlite) + FTS5: upsert, search, get
+  mcpServer.ts              search and get_record tools for Claude
   cli.ts                    CLI: sync | search | show | mcp
-tests/thread.test.ts        сквозной тест: JSONL → запись → база → поиск
+tests/thread.test.ts        end-to-end test: JSONL → record → database → search
 ```
